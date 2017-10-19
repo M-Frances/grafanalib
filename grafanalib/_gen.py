@@ -4,6 +4,11 @@ import argparse
 import json
 import os
 import sys
+import pprint
+import textwrap
+from importlib.machinery import SourceFileLoader
+
+import grafanalib._parse
 
 
 DASHBOARD_SUFFIX = '.dashboard.py'
@@ -152,10 +157,15 @@ def parse_dashboard(args):
     opts = parser.parse_args(args)
 
     with open(opts.dashboard) as f:
-        json_data = json.load(f)
+        json_data = json.load(f, cls=grafanalib._parse.DashboardDecoder)
 
-    import pprint
-    pprint.pprint(json_data)
+    python_code = textwrap.dedent("""
+    from grafanalib.core import *\n
+
+    dashboard = {}
+    """.format(pprint.pformat(json_data)))
+
+    print(python_code)
 
 
 def parse_dashboard_script():
