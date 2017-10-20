@@ -15,6 +15,18 @@ from numbers import Number
 import attr
 from attr.validators import in_, instance_of
 import re
+import sys
+
+
+def try_to_instantiate_object_from_data(cls, data):
+    try:
+        return cls(**data)
+    except TypeError as error:
+        print("Unable to instantiate object from data.\n"
+              "Probably due to an unimplemented feature.\n"
+              "Tried to instantiate an object of type {}\n".format(cls.__name__) ,
+              "Error: {}".format(error))
+        sys.exit(-1)
 
 
 @attr.s
@@ -475,7 +487,7 @@ class Target(object):
 
     @staticmethod
     def parse_json_data(data):
-        return Target(**data)
+        return try_to_instantiate_object_from_data(Target, data)
 
 
 @attr.s
@@ -1641,7 +1653,7 @@ class Graph(Panel):
                                for target in data['targets']]
         data.pop('type')
 
-        return Graph(**data)
+        return try_to_instantiate_object_from_data(Graph, data)
 
 
 @attr.s
