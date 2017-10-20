@@ -14,6 +14,7 @@ from numbers import Number
 
 import attr
 from attr.validators import in_, instance_of
+import re
 
 
 @attr.s
@@ -26,6 +27,20 @@ class RGBA(object):
     def to_json_data(self):
         return "rgba({}, {}, {}, {})".format(self.r, self.g, self.b, self.a)
 
+    REGEX = re.compile("^rgba\((\d+), (\d+), (\d+), (\d+(?:\.\d+))\)$")
+
+    @staticmethod
+    def parse_json_data(data):
+        match = RGBA.REGEX.match(data)
+
+        if match is not None:
+            return RGBA(
+                int(match.group(1)),
+                int(match.group(2)),
+                int(match.group(3)),
+                float(match.group(4))
+            )
+
 
 @attr.s
 class RGB(object):
@@ -36,6 +51,16 @@ class RGB(object):
     def to_json_data(self):
         return "rgb({}, {}, {})".format(self.r, self.g, self.b)
 
+    REGEX = re.compile("^rgb\((\d+), (\d+), (\d+)\)$")
+
+    @staticmethod
+    def parse_json_data(data):
+        match = RGB.REGEX.match(data)
+
+        if match is not None:
+            return RGB(int(match.group(1)), int(match.group(2)),
+                       int(match.group(3)))
+
 
 @attr.s
 class Pixels(object):
@@ -44,6 +69,15 @@ class Pixels(object):
     def to_json_data(self):
         return "{}px".format(self.num)
 
+    REGEX = re.compile("^(\d+)px$")
+
+    @staticmethod
+    def parse_json_data(data):
+        match = Pixels.REGEX.match(data)
+
+        if match is not None:
+            return Pixels(num=int(match.group(1)))
+
 
 @attr.s
 class Percent(object):
@@ -51,6 +85,15 @@ class Percent(object):
 
     def to_json_data(self):
         return "{}%".format(self.num)
+
+    REGEX = re.compile("^(\d+)%$")
+
+    @staticmethod
+    def parse_json_data(data):
+        match = Percent.REGEX.match(data)
+
+        if match is not None:
+            return Percent(int(match.group(1)))
 
 
 GREY1 = RGBA(216, 200, 27, 0.27)
@@ -268,6 +311,10 @@ class Mapping(object):
             'value': self.value,
         }
 
+    @staticmethod
+    def parse_json_data(data):
+        return Mapping(**data)
+
 
 MAPPING_TYPE_VALUE_TO_TEXT = 1
 MAPPING_TYPE_RANGE_TO_TEXT = 2
@@ -311,6 +358,11 @@ class Grid(object):
             'threshold2Color': self.threshold2Color,
         }
 
+    def parse_json_data(data):
+        data['threshold1Color'] = RGBA.parse_json_data(data['threshold1Color'])
+        data['threshold2Color'] = RGBA.parse_json_data(data['threshold2Color'])
+        return Grid(**data)
+
 
 @attr.s
 class Legend(object):
@@ -349,6 +401,10 @@ class Legend(object):
             'sort': self.sort,
             'sortDesc': self.sortDesc,
         }
+
+    @staticmethod
+    def parse_json_data(data):
+        return Legend(**data)
 
 
 def is_valid_max_per_row(instance, attribute, value):
@@ -417,6 +473,10 @@ class Target(object):
             'datasource': self.datasource,
         }
 
+    @staticmethod
+    def parse_json_data(data):
+        return Target(**data)
+
 
 @attr.s
 class Tooltip(object):
@@ -433,6 +493,11 @@ class Tooltip(object):
             'sort': self.sort,
             'value_type': self.valueType,
         }
+
+    @staticmethod
+    def parse_json_data(data):
+        data['valueType'] = data.pop('value_type')
+        return Tooltip(**data)
 
 
 def is_valid_xaxis_mode(instance, attribute, value):
@@ -465,6 +530,10 @@ class XAxis(object):
             'values': self.values,
             'show': self.show,
         }
+
+    @staticmethod
+    def parse_json_data(data):
+        return XAxis(**data)
 
 
 @attr.s
@@ -501,6 +570,10 @@ class YAxis(object):
             'show': self.show,
         }
 
+    @staticmethod
+    def parse_json_data(data):
+        return YAxis(**data)
+
 
 @attr.s
 class YAxes(object):
@@ -518,6 +591,10 @@ class YAxes(object):
             self.left,
             self.right,
         ]
+
+    @staticmethod
+    def parse_json_data(data):
+        return YAxes(left=YAxis(**data[0]), right=YAxis(**data[1]))
 
 
 def single_y_axis(**kwargs):
@@ -604,6 +681,22 @@ class Annotations(object):
             'list': self.list,
         }
 
+    @staticmethod
+    def parse_json_data(data):
+        return Annotations(**data)
+
+
+def parse_input(data):
+    object_type = data.get('type')
+    if object_type == 'datasource':
+        return DataSourceInput.parse_json_data(data)
+    elif object_type == 'constant':
+        return ConstantInput.parse_json_data(data)
+
+
+def parse_inputs(inputs):
+    return [parse_input(data) for data in inputs]
+
 
 @attr.s
 class DataLink(object):
@@ -637,6 +730,11 @@ class DataSourceInput(object):
             'type': 'datasource',
         }
 
+    @staticmethod
+    def parse_json_data(data):
+        data.pop('type')
+        return DataSourceInput(**data)
+
 
 @attr.s
 class ConstantInput(object):
@@ -653,6 +751,11 @@ class ConstantInput(object):
             'type': 'constant',
             'value': self.value,
         }
+
+    @staticmethod
+    def parse_json_data(data):
+        data.pop('type')
+        return ConstantInput(**data)
 
 
 @attr.s
@@ -676,6 +779,11 @@ class DashboardLink(object):
             'type': self.type,
             'url': self.uri,
         }
+
+    @staticmethod
+    def parse_json_data(data):
+        data.pop('type')
+        return DashboardLink(**data)
 
 
 @attr.s
@@ -803,6 +911,10 @@ class Template(object):
             'tagValuesQuery': self.tagValuesQuery,
         }
 
+    @staticmethod
+    def parse_json_data(data):
+        return Template(**data)
+
 
 @attr.s
 class Templating(object):
@@ -812,6 +924,10 @@ class Templating(object):
         return {
             'list': self.list,
         }
+
+    @staticmethod
+    def parse_json_data(data):
+        return Templating(**data)
 
 
 @attr.s
@@ -824,6 +940,12 @@ class Time(object):
             'from': self.start,
             'to': self.end,
         }
+
+    @staticmethod
+    def parse_json_data(data):
+        data['start'] = data.pop('from')
+        data['end'] = data.pop('to')
+        return Time(**data)
 
 
 DEFAULT_TIME = Time('now-1h', 'now')
@@ -851,6 +973,13 @@ class TimePicker(object):
             'time_options': self.timeOptions,
             'hidden': self.hidden
         }
+
+    @staticmethod
+    def parse_json_data(data):
+        data['refreshIntervals'] = data.pop('refresh_intervals')
+        data['timeOptions'] = data.pop('time_options')
+
+        return TimePicker(**data)
 
 
 DEFAULT_TIME_PICKER = TimePicker(
@@ -891,6 +1020,10 @@ class Evaluator(object):
             'params': self.params,
         }
 
+    @staticmethod
+    def parse_json_data(data):
+        return Evaluator(**data)
+
 
 def GreaterThan(value):
     return Evaluator(EVAL_GT, [value])
@@ -929,6 +1062,10 @@ class TimeRange(object):
 
     def to_json_data(self):
         return [self.from_time, self.to_time]
+
+    @staticmethod
+    def parse_json_data(data):
+        return TimeRange(from_time=data[0], to_time=data[1])
 
 
 @attr.s
@@ -975,6 +1112,10 @@ class AlertCondition(object):
             },
             'type': self.type,
         }
+
+    @staticmethod
+    def parse_json_data(data):
+        return AlertCondition(**data)
 
 
 @attr.s
@@ -1024,6 +1165,10 @@ class Notification(object):
         return {
             'uid': self.uid,
         }
+
+    @staticmethod
+    def parse_json_data(data):
+        return Alert(**data)
 
 
 @attr.s
@@ -1138,6 +1283,17 @@ class Dashboard(object):
             'version': self.version,
             'uid': self.uid,
         }
+
+    def parse_json_data(data):
+        data['inputs'] = parse_inputs(data.pop('__inputs'))
+        data['timePicker'] = data.pop('timepicker')
+        data['annotations'] = Annotations.parse_json_data(data['annotations'])
+        data['templating'] = Templating.parse_json_data(data['templating'])
+        data['rows'] = [Row.parse_json_data(row) for row in data['rows']]
+        data['time'] = Time.parse_json_data(data['time'])
+        data['timePicker'] = TimePicker.parse_json_data(data['timePicker'])
+
+        return Dashboard(**data)
 
 
 def _deep_update(base_dict, extra_dict):
@@ -1317,6 +1473,15 @@ class Row(object):
         }
 
 
+    @staticmethod
+    def parse_json_data(data):
+        data['panels'] = [
+            Graph.parse_json_data(panel) for panel in data['panels']]
+        data['height'] = Pixels.parse_json_data(data['height'])
+
+        return Row(**data)
+        
+
 @attr.s
 class Graph(Panel):
     """
@@ -1452,6 +1617,22 @@ class Graph(Panel):
         def set_refid(t):
             return t if t.refId else attr.evolve(t, refId=next(auto_ref_ids))
         return self._map_targets(set_refid)
+
+    @staticmethod
+    def parse_json_data(data):
+        data['dataSource'] = data.pop('datasource')
+        data['lineWidth'] = data.pop('linewidth')
+        data['pointRadius'] = data.pop('pointradius')
+        data['xAxis'] = XAxis(**data.pop('xaxis'))
+        data['yAxes'] = YAxes.parse_json_data(data.pop('yaxes'))
+        data['grid'] = Grid.parse_json_data(data['grid'])
+        data['legend'] = Legend.parse_json_data(data['legend'])
+        data['tooltip'] = Tooltip.parse_json_data(data['tooltip'])
+        data['targets'] = [Target.parse_json_data(target)
+                           for target in data['targets']]
+        data.pop('type')
+
+        return Graph(**data)
 
 
 @attr.s
@@ -1852,6 +2033,11 @@ class SingleStat(Panel):
                 'valueName': self.valueName,
             }
         )
+        
+    @staticmethod
+    def parse_json_data(data):
+        data.pop('type')
+        return SingleStat(**data)
 
 
 @attr.s
