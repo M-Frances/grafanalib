@@ -1623,7 +1623,7 @@ class Graph(Panel):
         data['dataSource'] = data.pop('datasource')
         data['lineWidth'] = data.pop('linewidth')
         data['pointRadius'] = data.pop('pointradius')
-        data['xAxis'] = XAxis(**data.pop('xaxis'))
+        data['xAxis'] = XAxis.parse_json_data(data.pop('xaxis'))
         data['yAxes'] = YAxes.parse_json_data(data.pop('yaxes'))
         data['grid'] = Grid.parse_json_data(data['grid'])
         data['legend'] = Legend.parse_json_data(data['legend'])
@@ -2033,7 +2033,7 @@ class SingleStat(Panel):
                 'valueName': self.valueName,
             }
         )
-        
+
     @staticmethod
     def parse_json_data(data):
         data.pop('type')
