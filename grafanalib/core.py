@@ -15,6 +15,60 @@ from numbers import Number
 import attr
 from attr.validators import in_, instance_of
 
+from collections import namedtuple
+class dicttransform(
+        namedtuple('dicttransform', ['old_key', 'new_key', 'transform'])):
+    '''Helper data structure used to simplify the transformations on data when
+    parsing the object from JSON. Used in conjunction with `transform_dict`
+    :param str old_key: Source key
+    :param str new_key: Destination key. If not specified same as `old_key``
+    :param function transform: Function used to transform the data, if not
+                               specified uses identity function
+
+    Example usage:
+    dicttransform('old_key', 'new_key') - renames keys
+    dicttransform('old_key', transform=some_function)
+     - uses some_function to transform data at `old_key`
+    dicttransform('old_key', 'new_key', some_function)
+     - use some_function to transform the data and rename the key from
+       `old_key` to `new_key`
+    '''
+
+    def __new__(cls, old_key, new_key=None, transform=lambda x: x):
+        if new_key is None:
+            new_key = old_key
+
+        return super(dicttransform, cls).__new__(cls, old_key, new_key,
+                                                 transform)
+
+
+def transform_dict(data, *key_transformations):
+    '''
+    :param dict data: Dictionary to be transformed
+    :param list(dicttransform): Transformation to perform
+    '''
+    new_data = dict(data)
+
+    for old_key, new_key, transform in key_transformations:
+        if old_key == 'dashboardPanels':#TODO  static the variable (panels/dashboardPanels)
+            new_data["panels"] = transform({"panels":new_data.get('panels')}).get("panels")
+        if old_key in new_data:
+            old_value = new_data.pop(old_key)
+            new_data[new_key] = transform(old_value)
+
+    return new_data
+
+
+def foreach(func):
+    def inner(args):
+        return [func(arg) for arg in args]
+    return inner
+
+def parse_panel_obj(data):
+    return transform_dict(
+        data,
+        dicttransform('panels', transform=foreach(lambda pnl: parse_object(pnl)))
+    )
 
 @attr.s
 class RGBA(object):
@@ -371,6 +425,12 @@ class Repeat(object):
     variable = attr.ib(default=None)
     maxPerRow = attr.ib(default=None, validator=is_valid_max_per_row)
 
+    @classmethod
+    def parse_json_data(cls, data):
+        if not data:
+            return cls({})
+        return cls(**data)
+
 
 def is_valid_target(instance, attribute, value):
     """
@@ -604,6 +664,10 @@ class Annotations(object):
             'list': self.list,
         }
 
+    @classmethod
+    def parse_json_data(cls, data):
+        return cls(**data)
+
 
 @attr.s
 class DataLink(object):
@@ -813,6 +877,9 @@ class Templating(object):
             'list': self.list,
         }
 
+    @classmethod
+    def parse_json_data(cls, data):
+        return cls(**data)
 
 @attr.s
 class Time(object):
@@ -824,6 +891,16 @@ class Time(object):
             'from': self.start,
             'to': self.end,
         }
+        
+    @classmethod
+    def parse_json_data(cls, data):
+        new_data = transform_dict(
+            data,
+            dicttransform('from','start'),
+            dicttransform('to','end'),
+        )
+
+        return cls(**new_data)
 
 
 DEFAULT_TIME = Time('now-1h', 'now')
@@ -852,6 +929,15 @@ class TimePicker(object):
             'hidden': self.hidden
         }
 
+    @classmethod
+    def parse_json_data(cls, data):
+        new_data = transform_dict(
+            data,
+            dicttransform('refresh_intervals','refreshIntervals'),
+            dicttransform('time_options','timeOptions'),
+        )
+
+        return cls(**new_data)
 
 DEFAULT_TIME_PICKER = TimePicker(
     refreshIntervals=[
@@ -1138,7 +1224,23 @@ class Dashboard(object):
             'version': self.version,
             'uid': self.uid,
         }
+    
+    @classmethod
+    def parse_json_data(cls, data):
+        new_data = transform_dict(
+            data,
+            dicttransform('annotations',transform=Annotations.parse_json_data),
+            dicttransform('dashboardPanels', transform=parse_panel_obj),
+            dicttransform(
+                'timepicker',
+                'timePicker',
+                TimePicker.parse_json_data
+            ),
+            dicttransform('time', transform=Time.parse_json_data),
+            dicttransform('templating', transform=Templating.parse_json_data)
+        )
 
+        return cls(**new_data)
 
 def _deep_update(base_dict, extra_dict):
     if extra_dict is None:
@@ -1238,7 +1340,6 @@ class Panel(object):
         _deep_update(res, self.extraJson)
         return res
 
-
 @attr.s
 class RowPanel(Panel):
     """
@@ -1266,6 +1367,14 @@ class RowPanel(Panel):
             }
         )
 
+    @classmethod
+    def parse_json_data(cls, data):
+        new_data = transform_dict(
+            data,
+            dicttransform('repeat', transform=Repeat.parse_json_data)
+        )
+
+        return cls(**new_data)
 
 @attr.s
 class Row(object):
@@ -2861,3 +2970,20 @@ class Worldmap(Panel):
                 'type': WORLD_MAP_TYPE
             }
         )
+
+# add more panel
+PANEL_TYPES = {
+    GRAPH_TYPE: Graph,
+    TEXT_TYPE: Text,
+    TABLE_TYPE: Table,
+    PIE_CHART_TYPE: PieChart,
+    ROW_TYPE: RowPanel
+}
+
+def parse_object(obj, mapping=PANEL_TYPES):
+    try:
+        type_str = obj.pop('type')
+        return mapping[type_str].parse_json_data(obj)
+    except KeyError:
+        raise ParseJsonException("Unknown object type {}".format("type"))
+
